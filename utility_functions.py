@@ -5,7 +5,6 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt
 from osgeo import gdal
-from gdalconst import *
 import pandas as pd
 from skimage import io
 import os
@@ -13,8 +12,22 @@ from torchvision.utils import make_grid
 
 np.random.seed(1003)
 
+def get_hist2d(arr,
+               mask=None,
+               arr_class=None,
+               bins=129,
+               bins_range=[0.3, 0.6],
+               normed=True,
+               b_invert_yaxis=True):
+    '''
+    Generate the 2D heat map
 
-def get_hist2d(arr, mask=None, arr_class=None, bins=129, bins_range=[0.3, 0.6], normed=True, b_invert_yaxis=True):
+    Args:
+        arr (ndarray), 4D numpy array (batch-channel-height-width), the input image that you want to generate heat maps for
+        mask (ndarray),
+
+
+    '''
     if arr_class is None:
         arr_class = np.zeros((arr.shape[2], arr.shape[3]))
 
@@ -58,41 +71,6 @@ def get_hist2d(arr, mask=None, arr_class=None, bins=129, bins_range=[0.3, 0.6], 
     return np.array(list_img), np.array(list_xedges), np.array(list_yedges)
 
 
-def plot_hist2d(data_hist, xedges=None, yedges=None, patch=None, Date=None, sep=None, id_img=None, **kwargs):
-    n_img, n_class, n_y, n_x = data_hist.shape
-    size = 4
-    n_ticks = 6
-    fig, ax = plt.subplots(n_img, n_class, figsize=(n_class * size, n_img * size))
-    for i_img in range(n_img):
-        for i_class in range(n_class):
-            if n_class != 1:
-                ax_cur = ax.flat[i_img * n_class + i_class]
-            else:
-                ax_cur = ax
-            ax_cur.imshow(data_hist[i_img, i_class], **kwargs)
-            if patch is not None and Date is not None and sep is not None:
-                ax_cur.set_title('patch index: {} date: {} sep: {}'.format(patch, Date, sep))
-            ax_cur.grid(True)
-            if xedges is not None:
-                xticks = [int(t) for t in np.linspace(0, n_x - 1, n_ticks)]
-                ax_cur.set_xticks(xticks)
-                ax_cur.set_xticklabels([f'{t:.2f}' for t in xedges[i_img, i_class, xticks]])
-            if yedges is not None:
-                yticks = [int(t) for t in np.linspace(0, n_y - 1, n_ticks)]
-                ax_cur.set_yticks(yticks)
-                ax_cur.set_yticklabels([f'{t:.1f}' for t in yedges[i_img, i_class, yticks]])
-
-            labels = ax_cur.get_xticklabels() + ax_cur.get_yticklabels()
-            for label in labels:
-                label.set_fontname('Times New Roman')
-                label.set_style('italic')
-                label.set_fontsize(8)
-                label.set_weight('bold')
-    plt.subplots_adjust(bottom=0.1, right=0.965, top=0.930, left=0.085, hspace=0.3, wspace=0.25)
-    plt.show()
-    return (fig)
-
-
 def JM_distance(x, y):
     '''
     Calculate the Jeffries-Matusita Distance between x and y
@@ -120,7 +98,6 @@ def JM_distance(x, y):
     output = np.sqrt(2 * (1 - np.exp(-alpha)))[0, 0]
     return (output)
 
-
 def get_separability(arr, arr_class):
     """
     :param arr:
@@ -146,7 +123,6 @@ def get_separability(arr, arr_class):
     # return np.array(list_separability)[:, [1, 2, 5]]
     return np.array(list_separability)[:, [1, 2, 3, 6, 7, 11]]
     # return np.array(list_separability)[:, [1, 2, 3, 4, 7, 8, 9, 13, 14, 19]]
-
 
 def get_target(
         data_hist,
@@ -222,63 +198,6 @@ def get_coordinate(arr, x_coor=True):
     return coor1 * coor2
 
 
-def confusion_matrix_from_hist(data_hist_cur):
-    ''' data_hist_cur: (n_class, row, col)'''
-    list_class = []
-    list_img = []
-    n_class = data_hist_cur.shape[0]
-    data_argmax = np.argmax(data_hist_cur, axis=0)
-    cm = np.zeros((n_class, n_class))
-    for i_class in range(n_class):
-        for j_class in range(n_class):
-            cm[i_class, j_class] = (
-                    data_hist_cur[i_class]
-                    * (data_argmax == j_class)
-            ).sum()
-    TP = np.zeros(n_class)
-    TN = np.zeros(n_class)
-    FP = np.zeros(n_class)
-    FN = np.zeros(n_class)
-    F1 = np.zeros(n_class)
-    for c in range(n_class):
-        TP[c] = cm[c, c]
-        TN[c] = np.array([cm[i, i] for i in range(n_class)]).sum() - cm[c, c]
-        FP[c] = cm[:, c].sum() - cm[c, c]
-        FN[c] = cm[c, :].sum() - cm[c, c]
-        if TP[c] != 0 and TN[c] != 0:
-            precision = TP[c] / (TP[c] + FP[c])
-            recall = TP[c] / (TP[c] + FN[c])
-            F1[c] = 2 * precision * recall / (precision + recall)
-        else:
-            F1[c] = 0
-
-    for i_class in range(n_class - 1):
-        if (F1 > 0.8).sum() == 3:
-            indi_cur = data_argmax == i_class
-            ## non-zero pixel in 2d histogram
-            indi_pos = 0 < data_hist_cur[i_class]
-            ## make sure the target is the class that has the largest value and exclude grids having no values
-            data_target_cur = data_hist_cur[i_class] * indi_cur * indi_pos
-            data_flat_cur = data_hist_cur[i_class][indi_cur & indi_pos]
-            data_flat_cur = np.sort(data_flat_cur)
-            cumsum_flat_cur = np.cumsum(data_flat_cur)
-
-            cumsum_pure = cumsum_flat_cur[-1] * (100 - 50) / 100
-            idx_threshold_pure = int(np.clip(
-                np.where(cumsum_flat_cur > cumsum_pure)[0][0],
-                0, len(data_flat_cur) - 1
-            ))
-            threshold_pure = data_flat_cur[idx_threshold_pure]
-            candidate = data_target_cur > threshold_pure
-            data_target_cur[candidate] = i_class
-            data_target_cur[~candidate] = 0
-        else:
-            data_target_cur = np.zeros([data_hist_cur.shape[1], data_hist_cur.shape[2]])
-        list_class.append(data_target_cur)
-    list_img.append(list_class)
-    return np.array(list_img).sum(axis=1)[:, np.newaxis, :, :], F1
-
-
 def confusion_matrix(pred, target, classes):
     assert isinstance(classes, list), 'please input a class list'
     if isinstance(pred, torch.Tensor):
@@ -295,7 +214,12 @@ def confusion_matrix(pred, target, classes):
     return cm
 
 
-def project_to_target(arr, patch_index, patch_size, id='wt_sfl_cn', classes=[0, 1], use_cm=False,
+def project_to_target(arr,
+                      patch_index,
+                      patch_size,
+                      id,
+                      classes=[0, 1],
+                      use_cm=False,
                       use_mask=True):
     '''
     :param arr: the predicted target, should be integer
@@ -348,7 +272,15 @@ def project_to_target(arr, patch_index, patch_size, id='wt_sfl_cn', classes=[0, 
             cm += confusion_matrix(pred, target_copy, classes)
             return cm, pred, target
 
-def save_fig(pred_hist, label, image, pred_img, target_img, save_dir, fig_name, mode='single', title=None):
+def save_fig(pred_hist,
+             label,
+             image,
+             pred_img,
+             target_img,
+             save_dir,
+             fig_name,
+             mode='single',
+             title=None):
     from matplotlib.colors import ListedColormap, LinearSegmentedColormap
     from matplotlib import cm
     fig1 = plt.figure(1, figsize=(14, 14))
@@ -477,35 +409,6 @@ def save_fig(pred_hist, label, image, pred_img, target_img, save_dir, fig_name, 
         plt.imshow(pred_img.squeeze())
     # plt.grid()
     # plt.show()
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-    plt.savefig(os.path.join(save_dir, fig_name))
-
-
-def save_fig_spectral(pred_hist, label, image, pred_img, target_img, save_dir, fig_name, mode='single'):
-    if mode == 'all':
-        plt.subplot(2, 3, 1)
-        test = make_grid(label, nrow=2, padding=10).cpu().numpy()
-        plt.imshow(make_grid(label, nrow=2, padding=10).cpu().numpy().squeeze()[:, :, 0], cmap='rainbow')
-        plt.xticks([0, 31, 63, 95, 127], [0, 0.075, 0.15, 0.225, 0.3])
-        plt.yticks([0, 31, 63, 95, 127], [0.6, 0.45, 0.3, 0.15, 0])
-
-        plt.subplot(2, 3, 2)
-        plt.imshow(label.cpu().numpy().squeeze()[:, :, 1], cmap='rainbow')
-        plt.xticks([0, 31, 63, 95, 127], [0, 0.075, 0.15, 0.225, 0.3])
-        plt.yticks([0, 31, 63, 95, 127], [0.6, 0.45, 0.3, 0.15, 0])
-
-        plt.subplot(2, 3, 3)
-        plt.imshow(label.cpu().numpy().squeeze()[:, :, 2], cmap='rainbow')
-        plt.xticks([0, 31, 63, 95, 127], [0, 0.075, 0.15, 0.225, 0.3])
-        plt.yticks([0, 31, 63, 95, 127], [0.6, 0.45, 0.3, 0.15, 0])
-
-        plt.subplot(2, 3, 4)
-        plt.imshow(pred_img.squeeze())
-        plt.subplot(2, 3, 5)
-        plt.imshow(np.array(target_img).squeeze())
-    if mode == 'single':
-        plt.imshow(pred_img.squeeze())
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
     plt.savefig(os.path.join(save_dir, fig_name))
@@ -785,32 +688,6 @@ def creat_map_mosaic(dir1, dir2, CDl_dir):
                     dataset.SetProjection(img_proj)  # 写入投影
                     for i in range(1):
                         dataset.GetRasterBand(i + 1).WriteArray(img[:, :])
-def match_extent(src_dir, dst_dir):
-    src_img = gdal.Open(src_dir)
-    dst_img = gdal.Open(dst_dir)
-    geotrans = dst_img.GetGeoTransform()
-    proj = dst_img.GetProjection()
-    dst_array = dst_img.ReadAsArray()
-    src_array = src_img.ReadAsArray()
-    replace_img = np.zeros([1, dst_img.RasterYSize, dst_img.RasterXSize])
-    replace_img[0, 2:src_img.RasterYSize+2, 3:src_img.RasterXSize+3] = src_array
-    # replace_img[0,:dst_img.RasterYSize-50,:dst_img.RasterXSize-41] = src_array[50:dst_img.RasterYSize, 41:dst_img.RasterXSize]
-    replace_img[replace_img == -128] = 0
-    writeTif(replace_img, r'F:\DigitalAG\liheng\EU\RPG\rpg2017_matched.tif', require_proj=True, transform=geotrans, proj=proj)
-
-def generate_target():
-    src_img = gdal.Open(r'F:\DigitalAG\liheng\EU\rpg2019_matched.tif')
-    geotrans = src_img.GetGeoTransform()
-    proj = src_img.GetProjection()
-    src_array = src_img.ReadAsArray()
-    dst_array = src_array.copy()
-    dst_array[(src_array!=17) * (src_array!=18) * (src_array!=139)] = 0
-    dst_array = dst_array[np.newaxis, :, :]
-    writeTif(dst_array, r'F:\DigitalAG\liheng\EU\rpg_2019_wbg.tif', require_proj=True, transform=geotrans,
-             proj=proj)
-
-
-
 
 
 if __name__ == '__main__':
@@ -825,11 +702,4 @@ if __name__ == '__main__':
     #                  os.path.join(root_dir, 'classification2'),
     #                  os.path.join(root_dir, r'2019\raw data\CDL_2019.tif'))
 
-    # dir = np.array(pd.read_csv(r'D:\My Drive\Digital_Agriculture\Liheng\iowa\2019\training.csv')['target_dir'])
-    # for idx, target in enumerate(dir):
-    #     patch_index = target.split('.')[:-1][0].split('\\')[-1]
-    #     ratios = get_class_ratio(io.imread(target), [1])
-    #     print (patch_index, ratios)
-    # read_json(r'D:\My Drive\Digital_Agriculture\Morocco\Planet_Morocco\temporal\site\site2')
-    match_extent(r'F:\DigitalAG\liheng\EU\RPG\rpg2017.tif', r'F:\DigitalAG\liheng\EU\2018\raw data\FR_2018_37.tif')
-    # generate_target()
+

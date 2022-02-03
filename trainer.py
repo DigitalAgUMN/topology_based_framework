@@ -135,37 +135,40 @@ class Trainer(object):
         for i in range(self.epoch):
             self.net.train()
             accu_loss_training = 0
-            accu_loss_vali = 0
             for j, sample in enumerate(self.train_loader, 0):
                 optimizer.zero_grad()
                 image = Variable(sample["image"], requires_grad=False)
                 label = Variable(sample["label"], requires_grad=False).type(torch.FloatTensor).sum(dim=1)
-                weights = torch.FloatTensor(self.hyperparams['weight']).cuda()
-                criterion = nn.CrossEntropyLoss(weight=weights)
+                weights = torch.FloatTensor(self.hyperparams['weight'])
                 if self.cuda:
                     image = image.cuda()
                     label = label.cuda()
+                    weights = weights.cuda()
+                criterion = nn.CrossEntropyLoss(weight=weights)
+
                 prediction = self.net(image)
                 loss = criterion(prediction, label.long())
                 accu_loss_training += loss
-                filter = torch.ge(torch.max(softmax(prediction, dim=1), dim=1)[0], 0.995).type(torch.cuda.FloatTensor)
+                filter = torch.ge(torch.max(softmax(prediction, dim=1), dim=1)[0], 0.995)
+                if self.cuda:
+                    filter = filter.cuda()
                 prediction = torch.argmax(softmax(prediction, dim=1), dim=1) * filter
-                cm += confusion_matrix(pred=prediction, target=label, classes=[0, 1, 2, 3])
+                cm += confusion_matrix(pred=prediction,
+                                       target=label,
+                                       classes=np.arange(number_of_crop+1))
                 loss.backward()
                 optimizer.step()
-                if self.lr_schedule != 'none':
+                if self.lr_schedule:
                     scheduler.step()
             for c in range(1, number_of_crop+1):
                 PA_training[i] = cm[c, c] / cm[c, :].sum()
                 UA_training[i] = cm[c, c] / cm[:, c].sum()
             accu_loss_training = accu_loss_training.cpu().detach().numpy()
             train_loss[i] = accu_loss_training / len(self.train_loader)
-            wandb.log({"train_loss": train_loss[i].item()}, step=i)
-            for c in range(number_of_crop):
-                wandb.log({self.crop[c] + "_UA": UA_training[c], self.crop[c] + "_PA": PA_training[c]}, step=i)
 
             ############ network validation ############
             self.net.eval()
+            accu_loss_vali = 0
             with torch.no_grad():
                 for k, sample in enumerate(self.vali_loader, 0):
                     image = Variable(sample["image"], requires_grad=False)
@@ -176,20 +179,16 @@ class Trainer(object):
                         image = image.cuda()
                         label = label.cuda()
                     prediction = self.net(image)
-                    loss_all_vali += criterion(prediction, label.long())
+                    accu_loss_vali += criterion(prediction, label.long())
                     prediction = torch.argmax(softmax(prediction, dim=1), dim=1)
-                    cm += confusion_matrix(pred=prediction, target=label, classes=[0, 1, 2, 3])
+                    cm += confusion_matrix(pred=prediction,
+                                           target=label,
+                                           classes=range(number_of_crop+1))
                 for c in range(1, number_of_crop + 1):
                     PA_vali.append(cm[c, c] / cm[c, :].sum())
                     UA_vali.append(cm[c, c] / cm[:, c].sum())
-                loss_all_vali = loss_all_vali.cpu().detach().data.numpy()
-                vali_loss[i] = loss_all_vali / len(self.vali_loader)
-                wandb.log({"vali_loss": vali_loss[i].item()}, step=i)
-                for c in range(number_of_crop):
-                    wandb.log({self.crop[c] + "_UA_vali": UA_vali[c], self.crop[c] + "_PA_vali": PA_vali[c]}, step=i)
-                wandb.log({"vali_loss": train_loss[i].item()}, step=i)
-                for c in range(number_of_crop):
-                    wandb.log({self.crop[c] + "_UA": UA_vali[c], self.crop[c] + "_PA": PA_vali[c]}, step=i)
+                accu_loss_vali = accu_loss_vali.cpu().detach().data.numpy()
+                vali_loss[i] = accu_loss_vali / len(self.vali_loader)
             self.save_model(i)
 
             elapse = time.time() - since

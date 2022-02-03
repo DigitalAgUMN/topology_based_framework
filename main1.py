@@ -6,6 +6,8 @@
 
 # !/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import os
+os.environ['KMP_DUPLICATE_LIB_OK']='True'
 import numpy as np
 import os
 from dataio import BuildingDataset
@@ -17,26 +19,27 @@ from trainer import Trainer
 from torch.autograd import Variable
 from utility_functions import project_to_target, save_fig, writeTif, save_fig_spectral
 import pandas as pd
-from dataio import check_data_target
 from skimage import io
-from dataio import scale_percentile_n
+
+
 
 
 global training, prediction, cuda
 training = True
 prediction = False
-cuda = True  # 是否使用GPU
+cuda = False  # 是否使用GPU
 seed = 11
 mode = 'multiple'
 crop = 'all'
-id = 'wt_sfl_cn'
 
-root_dir = r'F:\DigitalAG\liheng\EU\\' + id
-model_dir = r'F:\DigitalAG\liheng\EU\\' + id + r'\model'
 
-train_dir = os.path.join(root_dir, r'training_img')
-vali_dir = os.path.join(root_dir, r'training_img')
-test_dir = os.path.join(root_dir, r'training_img')
+root_dir = r'.\result'
+model_dir = r'.\result\model'
+if not os.path.exists(model_dir):
+    os.makedirs(model_dir)
+train_dir = r'.\data\training\img'
+vali_dir = r'.\data\training\img'
+test_dir = r'.\data\testing\img'
 
 hyperparameter = dict(
     batch_size=16,
@@ -52,10 +55,9 @@ hyperparameter = dict(
     hidden_layer=[32, 64],
     weight=[1, 150, 300, 400],
     model_index='18',
-    id=id,
-    crop = ['winter wheat', 'corn', 'sunflowers']
+    id='IA_corn_soy',
+    crop=['corn', 'soybean']
 )
-
 
 def accuracy_access(trainer, test_dir, model, model_folder):
     trainer.restore_model(model, True)
@@ -131,20 +133,22 @@ def run(gpu=0):
 
     # building the net
     model = Unet_3(features=hyperparameter['hidden_layer'])
-    # model = ResNetUNet(1)
     print('# parameters:', sum(param.numel() for param in model.parameters()))
     if cuda:
         model = model.cuda()
     identifier = hyperparameter['id'] + '_' + hyperparameter['model_index']
-    trainer = Trainer(net=model, file_path=root_dir, train_dir=train_dir, vali_dir=vali_dir, test_dir=test_dir,
+    trainer = Trainer(net=model,
+                      file_path=root_dir,
+                      train_dir=train_dir,
+                      vali_dir=vali_dir,
+                      test_dir=test_dir,
                       model_dir=model_dir,
-                      hyperparams=hyperparameter, identifier=identifier, cuda=cuda)
-
+                      hyperparams=hyperparameter,
+                      identifier=identifier,
+                      cuda=cuda)
     # training
     if training:
         print("begin training!")
-        wandb.init(entity='chenxilin', project='france', name=identifier,
-                   config=hyperparameter)
         trainer.train_model()
 
     if prediction:
