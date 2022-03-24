@@ -335,7 +335,6 @@ def crop_type_mapping(legend=True):
     # plt.savefig(dir.replace('csv', 'figures', 1).replace('csv', 'jpg'))
 
 
-
 def compareTwoCombination(dir, legend=True):
     data = pd.read_csv(dir)
     crops = ['winter wheat', 'beets', 'corn', 'sunflowers', 'rapeseed', 'barley']

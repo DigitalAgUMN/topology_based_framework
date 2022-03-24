@@ -12,50 +12,46 @@ from torchvision.utils import make_grid
 
 np.random.seed(1003)
 
-def get_hist2d(arr,
+def get_hist2d(img,
                mask=None,
-               arr_class=None,
+               label=None,
                bins=129,
-               bins_range=[0.3, 0.6],
-               normed=True,
+               scales=[0.3, 0.6],
                b_invert_yaxis=True):
     '''
     Generate the 2D heat map
-
     Args:
-        arr (ndarray), 4D numpy array (batch-channel-height-width), the input image that you want to generate heat maps for
-        mask (ndarray),
-
-
+        img (ndarray), 4D numpy array (batch-channel-height-width), the input image that you want to generate heat maps for
+        mask (ndarray), optional, the mask for the input image
+        label (ndarray), optional, pixel-wise label information of the input image
+        bins (int), bin size for the heat map
+        scales (list), scales for the heat map
     '''
-    if arr_class is None:
-        arr_class = np.zeros((arr.shape[2], arr.shape[3]))
-
-    code_class = np.unique(arr_class)
+    if label is None:
+        label = np.zeros((img.shape[2], img.shape[3]))
+    code_class = np.unique(label)
     n_class = len(code_class)
-
-    n_img = arr.shape[0]  ## time phase
+    n_img = img.shape[0]
     list_img = []
     list_xedges, list_yedges = [], []
     for i_img in range(n_img):
-        arr_cur = arr[i_img].transpose((1, 2, 0))
+        arr_cur = img[i_img].transpose((1, 2, 0))
         list_class = []
         list_xedges_class, list_yedges_class = [], []
         for i_class in range(0, n_class):
             ## return point pair (n by 2)
-            data_flat = arr_cur[arr_class == i_class]
+            data_flat = arr_cur[label == i_class]
             if mask is not None:
-                mask = mask[arr_class == i_class]
-                data_flat = data_flat[mask==1]
+                mask = mask[label == i_class]
+                data_flat = data_flat[mask == 1]
             indi_valid = np.logical_and(data_flat[:, 0] != 0, data_flat[:, 1] != 0)
             data_flat = data_flat[indi_valid, :]
             if not isinstance(bins, list):
-                bins0 = np.linspace(0, bins_range[0], bins)
-                bins1 = np.linspace(0, bins_range[1], bins)
+                bins0 = np.linspace(0, scales[0], bins)
+                bins1 = np.linspace(0, scales[1], bins)
                 new_bins = [bins1, bins0]
             if isinstance(bins, list):
                 new_bins = bins
-            # x = first dim -> x = cols, y = second dim -> y = reverted rows
             data_hist, yedges, xedges = np.histogram2d(
                 data_flat[:, 1], data_flat[:, 0], bins=new_bins
             )
@@ -70,14 +66,12 @@ def get_hist2d(arr,
         list_yedges.append(list_yedges_class)
     return np.array(list_img), np.array(list_xedges), np.array(list_yedges)
 
-
 def JM_distance(x, y):
     '''
     Calculate the Jeffries-Matusita Distance between x and y
     x and y have the same number of variables (columns).
     Each row is an observation.
     '''
-    # dif_mean = np.mean(x, axis=0, keepdims=True) - np.mean(y, axis=0, keepdims=True)
     dif_mean = np.empty((1, x.shape[1]))
     for i in range(x.shape[1]):
         dif_mean[0, i] = x[:, i].mean() - y[:, i].mean()
@@ -115,14 +109,11 @@ def get_separability(arr, arr_class):
             for j_class in range(n_class):
                 indi_valid = ~(np.isnan(arr_cur[:, :, 0]) | np.isnan(arr_cur[:, :, 1]))
                 data_flat_pos = arr_cur[(arr_class == code_class[i_class]) & indi_valid]
-                # data_flat_neg = arr_cur[(arr_class != code_class[i_class]) & indi_valid]
                 data_flat_neg = arr_cur[(arr_class == code_class[j_class]) & indi_valid]
                 separability = JM_distance(data_flat_pos, data_flat_neg)
                 list_class.append(separability)
         list_separability.append(list_class)
-    # return np.array(list_separability)[:, [1, 2, 5]]
-    return np.array(list_separability)[:, [1, 2, 3, 6, 7, 11]]
-    # return np.array(list_separability)[:, [1, 2, 3, 4, 7, 8, 9, 13, 14, 19]]
+    return np.delete(np.unique(np.array(list_separability)), [0])
 
 def get_target(
         data_hist,
@@ -146,7 +137,7 @@ def get_target(
             'background': [0],
             'corn': [1],
             'soybean': [2],
-            'all': range(0, len(separability) + 1)
+            'all': [0,1,2]
         }
         i_class_list = crop_index[crop]
         for i_class in i_class_list:

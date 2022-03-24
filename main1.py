@@ -1,37 +1,28 @@
 #!/usr/bin/env python
 # coding: utf-8
+'''
+This is the main function that run the topo
+'''
 
-# In[70]:
-
-
-# !/usr/bin/env python3
-# -*- coding: utf-8 -*-
 import os
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 import numpy as np
-import os
-from dataio import BuildingDataset
+from Dataset import BuildingDataset
 import torch
 import torch.utils as utils
-from model import Unet, Unet_3
-import wandb
+from model import Unet
 from trainer import Trainer
 from torch.autograd import Variable
-from utility_functions import project_to_target, save_fig, writeTif, save_fig_spectral
+from utility_functions import project_to_target, save_fig, writeTif
 import pandas as pd
 from skimage import io
-
-
-
 
 global training, prediction, cuda
 training = True
 prediction = False
-cuda = False  # 是否使用GPU
+cuda = False
 seed = 11
-mode = 'multiple'
 crop = 'all'
-
 
 root_dir = r'.\result'
 model_dir = r'.\result\model'
@@ -59,6 +50,52 @@ hyperparameter = dict(
     crop=['corn', 'soybean']
 )
 
+def run(gpu=0):
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        print('-------------------------')
+        print(torch.backends.cudnn.version())
+        print(torch.__version__)
+        if not cuda:
+            print("WARNING: You have a CUDA device, so you should probably run with --cuda")
+        else:
+            print("There are {} CUDA devices".format(torch.cuda.device_count()))
+            print("Setting torch GPU to {}".format(gpu))
+            torch.cuda.set_device(gpu)
+            print("Using device:{} ".format(torch.cuda.current_device()))
+            torch.cuda.manual_seed(seed)
+
+    # building the net
+    model = Unet(features=hyperparameter['hidden_layer'])
+    print('# parameters:', sum(param.numel() for param in model.parameters()))
+    if cuda:
+        model = model.cuda()
+    identifier = hyperparameter['id'] + '_' + hyperparameter['model_index']
+    trainer = Trainer(net=model,
+                      file_path=root_dir,
+                      train_dir=train_dir,
+                      vali_dir=vali_dir,
+                      test_dir=test_dir,
+                      model_dir=model_dir,
+                      hyperparams=hyperparameter,
+                      identifier=identifier,
+                      cuda=cuda)
+    # training
+    if training:
+        print("begin training!")
+        trainer.train_model()
+
+    if prediction:
+        print("restore the model")
+        for model_folder in os.listdir(model_dir):
+            if model_folder.split('_')[-1] in ['notselected']:
+                continue
+            model_folder_path = os.path.join(model_dir, model_folder)
+            if not os.path.isdir(model_folder_path):
+                continue
+            model = os.path.join(model_folder_path, str(model_folder) + '.pkl')
+            accuracy_access(trainer, test_dir, model, model_folder)
+
 def accuracy_access(trainer, test_dir, model, model_folder):
     trainer.restore_model(model, True)
     test_data = BuildingDataset(dir=test_dir, transform=None, target=False)
@@ -72,7 +109,6 @@ def accuracy_access(trainer, test_dir, model, model_folder):
         label = io.imread(os.path.join(test_dir.replace('_img', '_target'), patch[0] + '.tif'))
         if cuda:
             image = image.cuda()
-            # label = label.cuda()
         pred = trainer.predict(image)
         filter = torch.ge(torch.max(torch.nn.functional.softmax(pred, dim=1), dim=1)[0], 0.995).type(
             torch.cuda.FloatTensor)
@@ -113,62 +149,6 @@ def accuracy_access(trainer, test_dir, model, model_folder):
         data={0: [model_folder, precision_wheat, precision_corn, precision_sunflower, count, 'corn/soybean']},
         orient='index', columns=['model_name', 'precision_wheat', 'precision_corn', 'precision_sunflower', 'count', 'info']), ignore_index=True)
     df.to_csv(os.path.join(model_dir, 'accuracy2.csv'), index=False)
-
-def run(gpu=0):
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        print('-------------------------')
-        print(torch.backends.cudnn.version())
-        print(torch.__version__)
-        if not cuda:
-            print("WARNING: You have a CUDA device, so you should probably run with --cuda")
-        else:
-            # os.environ['CUDA_ENABLE_DEVICES'] = '0'
-            print("There are {} CUDA devices".format(torch.cuda.device_count()))
-            print("Setting torch GPU to {}".format(gpu))
-            torch.cuda.set_device(gpu)
-            print("Using device:{} ".format(torch.cuda.current_device()))
-            torch.cuda.manual_seed(seed)
-            # torch.backends.cudnn.enabled = False
-
-    # building the net
-    model = Unet_3(features=hyperparameter['hidden_layer'])
-    print('# parameters:', sum(param.numel() for param in model.parameters()))
-    if cuda:
-        model = model.cuda()
-    identifier = hyperparameter['id'] + '_' + hyperparameter['model_index']
-    trainer = Trainer(net=model,
-                      file_path=root_dir,
-                      train_dir=train_dir,
-                      vali_dir=vali_dir,
-                      test_dir=test_dir,
-                      model_dir=model_dir,
-                      hyperparams=hyperparameter,
-                      identifier=identifier,
-                      cuda=cuda)
-    # training
-    if training:
-        print("begin training!")
-        trainer.train_model()
-
-    if prediction:
-        print("restore the model")
-        for model_folder in os.listdir(model_dir):
-            if model_folder.split('_')[-1] in ['notselected']:
-                continue
-            model_folder_path = os.path.join(model_dir, model_folder)
-            if not os.path.isdir(model_folder_path):
-                continue
-            if mode == 'single':
-                model = os.path.join(model_folder_path, str(model_folder) + '.pkl')
-                accuracy_access(trainer, test_dir, model, model_folder)
-            if mode == 'multiple':
-                for epoch in range(173,174):
-                    current_epoch = model_folder.split('_')[-1]
-                    model = os.path.join(model_folder_path, model_folder.replace(current_epoch, str(epoch)) + '.pkl')
-                    if model_folder.replace(current_epoch, str(epoch)) + '.pkl' not in os.listdir(model_folder_path):
-                        continue
-                    accuracy_access(trainer, test_dir, model, model_folder.replace(current_epoch, str(epoch)) + '.pkl')
 
 if __name__ == "__main__":
     run()

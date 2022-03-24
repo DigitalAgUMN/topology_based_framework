@@ -8,14 +8,13 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.utils as utils
-from dataio import BuildingDataset
+from generate_heat_map import BuildingDataset
 from torch.autograd import Variable
 import time
 import os
-from torch.optim.lr_scheduler import StepLR, CyclicLR, ReduceLROnPlateau, MultiStepLR
+from torch.optim.lr_scheduler import StepLR, CyclicLR, MultiStepLR
 import numpy as np
-import wandb
-from utility_functions import project_to_target, confusion_matrix
+from utility_functions import confusion_matrix
 
 def inplace_relu(m):
     classname = m.__class__.__name__
@@ -37,9 +36,9 @@ def collate_fn(data):
     name = name.append(b['name'] for b in data)
     return {'image': image, 'patch': patch, 'name':name, 'label':label}
 
-
 class Trainer(object):
-    def __init__(self, net, file_path, train_dir, vali_dir, test_dir, model_dir, cuda=False, identifier=None,
+    def __init__(self, net, file_path, train_dir, vali_dir,
+                 test_dir, model_dir, cuda=False, identifier=None,
                  hyperparams=None):
         self.file_path = file_path
         self.train_dir = train_dir
@@ -155,7 +154,7 @@ class Trainer(object):
                 prediction = torch.argmax(softmax(prediction, dim=1), dim=1) * filter
                 cm += confusion_matrix(pred=prediction,
                                        target=label,
-                                       classes=np.arange(number_of_crop+1))
+                                       classes=list(range(number_of_crop+1)))
                 loss.backward()
                 optimizer.step()
                 if self.lr_schedule:
@@ -183,10 +182,10 @@ class Trainer(object):
                     prediction = torch.argmax(softmax(prediction, dim=1), dim=1)
                     cm += confusion_matrix(pred=prediction,
                                            target=label,
-                                           classes=range(number_of_crop+1))
+                                           classes=list(range(number_of_crop+1)))
                 for c in range(1, number_of_crop + 1):
-                    PA_vali.append(cm[c, c] / cm[c, :].sum())
-                    UA_vali.append(cm[c, c] / cm[:, c].sum())
+                    PA_vali[i] = cm[c, c] / cm[c, :].sum()
+                    UA_vali[i] = cm[c, c] / cm[:, c].sum()
                 accu_loss_vali = accu_loss_vali.cpu().detach().data.numpy()
                 vali_loss[i] = accu_loss_vali / len(self.vali_loader)
             self.save_model(i)
