@@ -9,8 +9,8 @@ from skimage import io
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from utility_functions import get_hist2d, get_target, get_separability
-from utility_functions import get_coordinate
+from Utility_functions import get_hist2d, get_target, get_separability
+from Utility_functions import get_coordinate
 
 np.random.seed(2000)
 class generate_heat_map(object):

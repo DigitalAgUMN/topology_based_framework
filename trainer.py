@@ -12,7 +12,6 @@ import torch.optim as optim
 import torch.utils as utils
 from Dataset import BuildingDataset
 from torch.autograd import Variable
-from utility_functions import confusion_matrix
 from torch.optim.lr_scheduler import StepLR, CyclicLR, MultiStepLR
 
 def inplace_relu(m):

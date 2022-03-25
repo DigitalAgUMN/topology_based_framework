@@ -4,7 +4,7 @@
 import os
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 import torch
-from model import Unet
+from Model import Unet
 from Trainer import Trainer
 
 class Execution(object):
