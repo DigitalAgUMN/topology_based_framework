@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Created on Tue Mar  6 09:00:06 2018
 
-@author: huijian
-"""
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
-
 
 def bn_conv_relu(in_channels, out_channels):
     """
@@ -34,7 +29,7 @@ def std_upconv(features, top=False):
             nn.BatchNorm2d(features[1]),
             nn.Conv2d(features[1], features[0], kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
-            nn.Conv2d(features[0], 4, kernel_size=1, stride=1, padding=0))
+            nn.Conv2d(features[0], 3, kernel_size=1, stride=1, padding=0))
 
         return upconv
 
@@ -53,7 +48,7 @@ def std_upconv(features, top=False):
 
 class Unet(nn.Module):
     def __init__(self, in_channels=4, features=[64, 96]):
-        super(Unet_3, self).__init__()
+        super(Unet, self).__init__()
 
         self.preconv = nn.Sequential(
             nn.Conv2d(in_channels, features[0], kernel_size=3, stride=1, padding=1),
@@ -113,7 +108,6 @@ class Unet(nn.Module):
         tmp = saved_part.pop()
         x = torch.cat((x, tmp), 1) # [b, 128, 192, 192]
         x = self.upconv3(x) # [b, 1, 192, 192]
-
         return x
 
 if __name__ == "__main__":

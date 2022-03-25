@@ -3,18 +3,17 @@
 """
 @author: Chenxi
 """
-
+import os
+import time
 import torch
+import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 import torch.utils as utils
-from generate_heat_map import BuildingDataset
+from Dataset import BuildingDataset
 from torch.autograd import Variable
-import time
-import os
-from torch.optim.lr_scheduler import StepLR, CyclicLR, MultiStepLR
-import numpy as np
 from utility_functions import confusion_matrix
+from torch.optim.lr_scheduler import StepLR, CyclicLR, MultiStepLR
 
 def inplace_relu(m):
     classname = m.__class__.__name__
@@ -37,20 +36,17 @@ def collate_fn(data):
     return {'image': image, 'patch': patch, 'name':name, 'label':label}
 
 class Trainer(object):
-    def __init__(self, net, file_path, train_dir, vali_dir,
-                 test_dir, model_dir, cuda=False, identifier=None,
-                 hyperparams=None):
-        self.file_path = file_path
+    def __init__(self, net, train_dir, vali_dir, test_dir, result_dir, hyperparams, identifier, cuda=False):
+        self.net = net
         self.train_dir = train_dir
         self.vali_dir = vali_dir
         self.test_dir = test_dir
-        self.model_dir = model_dir
-        self.net = net
+        self.result_dir = result_dir
         self.hyperparams = hyperparams
+        self.identifier = identifier
+        self.cuda = cuda
         self.opt = hyperparams['optimizer']
         self.learn_rate = hyperparams['lr']
-        self.cuda = cuda
-        self.identifier = identifier
         self.lr_schedule = hyperparams['lr_scheduler']
         self.weight = hyperparams['weight']
         self.wd = hyperparams['weight_decay']
@@ -89,8 +85,8 @@ class Trainer(object):
         This function is used to create necessary folders to save models, textbooks and images
         :return:
         '''
-        model_folder = self.model_dir
-        model_path = os.path.join(model_folder, self.identifier + '_notselected')
+        model_folder = os.path.join(self.result_dir, 'model')
+        model_path = os.path.join(model_folder, self.identifier)
         if not os.path.exists(model_folder):
             os.makedirs(model_folder)
         if not os.path.exists(model_path):
@@ -116,6 +112,7 @@ class Trainer(object):
 
     def train_model(self):
         ############ parameters initialization ############
+        ###################################################
         torch.backends.cudnn.deterministic = True
         since = time.time()
         optimizer = self.select_optimizer()
@@ -131,6 +128,7 @@ class Trainer(object):
         UA_vali = np.zeros([self.epoch])
 
         ############ network training ############
+        ##########################################
         for i in range(self.epoch):
             self.net.train()
             accu_loss_training = 0
@@ -144,7 +142,6 @@ class Trainer(object):
                     label = label.cuda()
                     weights = weights.cuda()
                 criterion = nn.CrossEntropyLoss(weight=weights)
-
                 prediction = self.net(image)
                 loss = criterion(prediction, label.long())
                 accu_loss_training += loss
@@ -166,6 +163,7 @@ class Trainer(object):
             train_loss[i] = accu_loss_training / len(self.train_loader)
 
             ############ network validation ############
+            ############################################
             self.net.eval()
             accu_loss_vali = 0
             with torch.no_grad():
@@ -201,17 +199,9 @@ class Trainer(object):
                 round(vali_loss[i], 5),
                 elapse))
 
-
     def save_model(self, epoch):
-        torch.save(self.net, os.path.join(self.model_path, self.identifier + 'e_' + str(epoch) + ".pkl"))
+        torch.save(self.net, os.path.join(self.model_path, self.identifier + '_e_' + str(epoch) + ".pkl"))
 
-    def restore_model(self, dir=None, user_defined=False):
-        if not user_defined:
-            self.net = torch.load(os.path.join(self.model_path, self.identifier + ".pkl"))
-        if user_defined:
-            self.net = torch.load(dir)
 
-    def predict(self, image):
-        self.net.eval()
-        prediction = self.net(image)
-        return prediction
+
+
