@@ -4,5 +4,5 @@ this repository includes codes to implement the approach in the paper
 Step 1. segment satellite imagery into image patches and build training, validation and testing dataset using <b>segmentation.py</b>  
 Step 2. generate heat maps and their targets using <b>generate_heat_map.py</b>  
 Step 3. (optional) visually check your type-I and type-II heat maps and make revisions if there's any  
-Step 4. train deep learning models using <b>main.py</b>  
-Sample data can be found through the link: https://drive.google.com/drive/folders/1Vu5SRpjzIuJQNsXQmklYFmTBu7_OJIeB?usp=sharing
+Step 4. train deep learning models using <b>Execuation.py</b>  
+
