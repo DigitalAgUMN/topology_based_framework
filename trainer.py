@@ -10,7 +10,8 @@ import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 import torch.utils as utils
-from Dataset import BuildingDataset
+from dataset import BuildingDataset
+from sklearn.metrics import confusion_matrix
 from torch.autograd import Variable
 from torch.optim.lr_scheduler import StepLR, CyclicLR, MultiStepLR
 
@@ -51,7 +52,7 @@ class Trainer(object):
         self.wd = hyperparams['weight_decay']
         self.bs = hyperparams['batch_size']
         self.epoch = hyperparams['epochs']
-        self.crop = hyperparams['crop']
+        self.classnames = hyperparams['classname']
         self.train_data = BuildingDataset(dir=self.train_dir, transform=None)
         self.train_loader = utils.data.DataLoader(self.train_data, batch_size=self.bs, shuffle=True, num_workers=8,
                                              collate_fn=collate_fn)
@@ -117,17 +118,17 @@ class Trainer(object):
         optimizer = self.select_optimizer()
         scheduler = self.select_scheduler(optimizer)
         softmax = torch.nn.functional.softmax
-        number_of_crop = len(self.crop)
-        cm = np.zeros([number_of_crop + 1, number_of_crop + 1])
+        number_of_class = len(self.classnames)
         train_loss = np.zeros([self.epoch])
         vali_loss = np.zeros([self.epoch])
-        PA_training = np.zeros([self.epoch])
-        UA_training = np.zeros([self.epoch])
-        PA_vali = np.zeros([self.epoch])
-        UA_vali = np.zeros([self.epoch])
+        PA_training, UA_training, PA_validation, UA_validation = {}, {}, {}, {}
+        for c in self.classnames:
+            PA_training[c] = np.zeros([self.epoch])
+            UA_training[c] = np.zeros([self.epoch])
+            PA_validation[c] = np.zeros([self.epoch])
+            PA_validation[c] = np.zeros([self.epoch])
 
         ############ network training ############
-        ##########################################
         for i in range(self.epoch):
             self.net.train()
             accu_loss_training = 0
@@ -148,14 +149,15 @@ class Trainer(object):
                 if self.cuda:
                     filter = filter.cuda()
                 prediction = torch.argmax(softmax(prediction, dim=1), dim=1) * filter
-                cm += confusion_matrix(pred=prediction,
-                                       target=label,
-                                       classes=list(range(number_of_crop+1)))
+                # cm += confusion_matrix(pred=prediction,
+                #                        target=label,
+                #                        classes=list(range(number_of_crop+1)))
+                cm = confusion_matrix(label.numpy().flatten(), prediction.numpy().flatten())
                 loss.backward()
                 optimizer.step()
                 if self.lr_schedule:
                     scheduler.step()
-            for c in range(1, number_of_crop+1):
+            for c in range(1, number_of_crop):
                 PA_training[i] = cm[c, c] / cm[c, :].sum()
                 UA_training[i] = cm[c, c] / cm[:, c].sum()
             accu_loss_training = accu_loss_training.cpu().detach().numpy()
