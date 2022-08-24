@@ -4,8 +4,8 @@
 import os
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 import torch
-from Model import Unet
-from Trainer import Trainer
+from model import Unet
+from trainer import Trainer
 
 class Execution(object):
     def __init__(self, train_dir, vali_dir, test_dir, result_dir, hyperparameter, cuda=False):
@@ -67,6 +67,6 @@ if __name__ == "__main__":
         weight=[1, 150, 300],
         model_index='2',
         id='IA_corn_soy',
-        crop=['background', 'corn', 'soybean'])
+        classname=['background', 'corn', 'soybean'])
     model = Execution(train_dir, vali_dir, test_dir, result_dir, hyperparameter, cuda=False)
     model.train()

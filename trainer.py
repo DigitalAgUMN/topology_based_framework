@@ -126,7 +126,7 @@ class Trainer(object):
             PA_training[c] = np.zeros([self.epoch])
             UA_training[c] = np.zeros([self.epoch])
             PA_validation[c] = np.zeros([self.epoch])
-            PA_validation[c] = np.zeros([self.epoch])
+            UA_validation[c] = np.zeros([self.epoch])
 
         ############ network training ############
         for i in range(self.epoch):
@@ -149,18 +149,15 @@ class Trainer(object):
                 if self.cuda:
                     filter = filter.cuda()
                 prediction = torch.argmax(softmax(prediction, dim=1), dim=1) * filter
-                # cm += confusion_matrix(pred=prediction,
-                #                        target=label,
-                #                        classes=list(range(number_of_crop+1)))
                 cm = confusion_matrix(label.numpy().flatten(), prediction.numpy().flatten())
                 loss.backward()
                 optimizer.step()
                 if self.lr_schedule:
                     scheduler.step()
-            for c in range(1, number_of_crop):
-                PA_training[i] = cm[c, c] / cm[c, :].sum()
-                UA_training[i] = cm[c, c] / cm[:, c].sum()
-            accu_loss_training = accu_loss_training.cpu().detach().numpy()
+            for id_c, c in enumerate(self.classnames):
+                PA_training[c][i] = cm[id_c, id_c] / cm[id_c, :].sum()
+                UA_training[c][i] = cm[id_c, id_c] / cm[:, id_c].sum()
+            accu_loss_training = accu_loss_training.detach().numpy()
             train_loss[i] = accu_loss_training / len(self.train_loader)
 
             ############ network validation ############
@@ -179,12 +176,10 @@ class Trainer(object):
                     prediction = self.net(image)
                     accu_loss_vali += criterion(prediction, label.long())
                     prediction = torch.argmax(softmax(prediction, dim=1), dim=1)
-                    cm += confusion_matrix(pred=prediction,
-                                           target=label,
-                                           classes=list(range(number_of_crop+1)))
-                for c in range(1, number_of_crop + 1):
-                    PA_vali[i] = cm[c, c] / cm[c, :].sum()
-                    UA_vali[i] = cm[c, c] / cm[:, c].sum()
+                    cm = confusion_matrix(label.numpy().flatten(), prediction.numpy().flatten())
+                for id_c, c in enumerate(self.classnames):
+                    PA_validation[c][i] = cm[id_c, id_c] / cm[id_c, :].sum()
+                    UA_validation[c][i] = cm[id_c, id_c] / cm[:, id_c].sum()
                 accu_loss_vali = accu_loss_vali.cpu().detach().data.numpy()
                 vali_loss[i] = accu_loss_vali / len(self.vali_loader)
             self.save_model(i)
@@ -194,10 +189,20 @@ class Trainer(object):
                 "Epoch:{}/{}\n"
                 "training_loss:{}\n"
                 "vali_loss:{}\n"
+                "class names:{}\n"
+                "PA_training:{}\n"
+                "UA_training:{}\n"
+                "PA_validation:{}\n"
+                "UA_validation:{}\n"
                 "Time_elapse:{}\n'".format(
                 i + 1, self.epoch,
                 round(train_loss[i], 5),
                 round(vali_loss[i], 5),
+                self.classnames,
+                [round(l[i], 5) for l in PA_training.values()],
+                [round(l[i], 5) for l in UA_training.values()],
+                [round(l[i], 5) for l in PA_validation.values()],
+                [round(l[i], 5) for l in UA_validation.values()],
                 elapse))
 
     def save_model(self, epoch):
