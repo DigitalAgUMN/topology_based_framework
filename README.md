@@ -8,6 +8,6 @@ Step 4. train deep learning models using <b>Execuation.py</b>
 ## testing data
 You can access the toy data via the link: https://drive.google.com/drive/folders/1Vu5SRpjzIuJQNsXQmklYFmTBu7_OJIeB?usp=sharing  
 -- the toy data contains "raw data", "segmentation", "training", "validation", "testing"  
--- the "raw data" folder contains 24 Sentinel-2 composite (every 5 days from June to September), 2017 and 2018 CDL, and binary historcal CDL (0 for areas that have never been planted with corn/soybeans, 1 for areas that have been planted one of corn/soybeans)
+-- the "raw data" folder contains 24 Sentinel-2 composite (every 5 days from June to September), 2017 and 2018 CDL, and binary historcal CDL (0 for areas that have never been planted with corn/soybeans, 1 for areas that have been planted one of corn/soybeans)  
 -- the "segmentation" folder contains segmented image patch from all imagery in the "raw data" folder, which is actually the results of <b>Segmentation.py</b>  
 -- "training", "validation", "testing" folders are image patches assigned for training, validation and testing purposes
